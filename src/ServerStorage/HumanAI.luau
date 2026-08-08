@@ -286,8 +286,8 @@ HumanAI.new = function(model)
 					model:SetAttribute("ObtainedCure", true)
 					
 					-- Manage cure uses
-					cureUsesRemaining = 3
-					model:SetAttribute("CureUsesRemaining", 3)
+					cureUsesRemaining = 5
+					model:SetAttribute("CureUsesRemaining", 5)
 
 					-- Show that they have the cure with visual effects
 					local highlight = Instance.new("Highlight")
