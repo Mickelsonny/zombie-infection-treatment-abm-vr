@@ -252,7 +252,22 @@ resetFunction.OnServerInvoke = function(player)
 	return resetSimulation(player)
 end
 
--- Death Reset
+-- Simulation runs for data collection
+local DATA_COLLECTION_ENABLED = false
+local NUM_TRIALS = 30
+local RUN_DURATION = 80
+local SAMPLE_INTERVAL = 1
+local MAX_ATTEMPTS = 3 -- # of retries if a trial has an error
+
+local MAPS = {"Farm", "City"}
+local SETTINGS = {
+	{agentsPerPoint = 10, humanPick = 4},
+	{agentsPerPoint = 15, humanPick = 4},
+	{agentsPerPoint = 10, humanPick = 6},
+	{agentsPerPoint = 15, humanPick = 6},
+}
+
+-- Death reset (ignored during data collection in case of player death)
 Players.PlayerAdded:Connect(function(player)
 	player.CharacterAdded:Connect(function(character)
 		local humanoid = character:WaitForChild("Humanoid")
@@ -263,8 +278,101 @@ Players.PlayerAdded:Connect(function(player)
 				diedConnection:Disconnect()
 				diedConnection = nil
 			end
-			
+
+			if DATA_COLLECTION_ENABLED then return end
 			resetSimulation(player)
 		end)
 	end)
 end)
+
+local function countAgents()
+	local zombieCount, humanCount = 0, 0
+	for _, zombie in ipairs(workspace.Zombies:GetChildren()) do
+		local humanoid = zombie:FindFirstChild("Humanoid")
+		if zombie:GetAttribute("Name") == "Zombie" and humanoid and humanoid.Health > 0 then 
+			zombieCount += 1 
+		end
+	end
+	
+	for _, human in ipairs(workspace.Humans:GetChildren()) do
+		local humanoid = human:FindFirstChild("Humanoid")
+		if human:GetAttribute("Name") == "Human" and humanoid and humanoid.Health > 0 then 
+			humanCount += 1 
+		end
+	end
+	
+	return zombieCount, humanCount
+end
+
+local function runTrial()
+	local zombies, humans = {}, {}
+	local t0 = os.clock()
+	for k = 0, RUN_DURATION / SAMPLE_INTERVAL do
+		task.wait(math.max(t0 + k * SAMPLE_INTERVAL - os.clock(), 0))
+		
+		local zombie, human = countAgents()
+		table.insert(zombies, zombie)
+		table.insert(humans, human)
+	end
+	
+	return zombies, humans
+end
+
+if DATA_COLLECTION_ENABLED then
+	task.spawn(function()
+		local player = Players:GetPlayers()[1] or Players.PlayerAdded:Wait()
+		task.wait(3) -- allow time for the map to load
+
+		local totalRuns = #MAPS * #SETTINGS * NUM_TRIALS
+		local done = 0
+
+		for _, mapName in ipairs(MAPS) do
+			local mapFolder = workspace:WaitForChild(mapName)
+			spawnLocations = mapFolder.Spawns:GetChildren()
+			cureModels = mapFolder.Cures:GetChildren()
+
+			for _, setting in ipairs(SETTINGS) do
+				parameters.agentsPerPoint = setting.agentsPerPoint
+				parameters.humanPick = setting.humanPick
+				local metadata = string.format("%s,%d,%d", mapName, setting.agentsPerPoint, setting.humanPick)
+
+				for trial = 1, NUM_TRIALS do
+					local zombies, humans
+
+					for attempt = 1, MAX_ATTEMPTS do
+						local success, dataZ, dataH = pcall(function()
+							startSimulation(mapName)
+							return runTrial()
+						end)
+
+						local s, r = pcall(resetSimulation, player)
+						if not s then
+							warn("Reset failed:", r) 
+						end
+						task.wait(5)
+
+						if success then
+							zombies, humans = dataZ, dataH
+							break
+						end
+						warn(string.format("%s trial %d attempt %d failed: %s", metadata, trial, attempt, tostring(dataZ)))
+					end
+
+					if zombies then
+						print(table.concat({
+							"#BEGIN",
+							string.format("%s,zombies,%d,%s", metadata, trial, table.concat(zombies, ",")),
+							string.format("%s,humans,%d,%s", metadata, trial, table.concat(humans, ",")),
+							"#END",
+						}, "\n"))
+					end
+
+					done += 1
+					print(string.format("Progress: %d/%d runs", done, totalRuns))
+				end
+			end
+		end
+
+		print("ALL SIMULATION RUNS COMPLETE!")
+	end)
+end

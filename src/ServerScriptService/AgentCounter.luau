@@ -39,16 +39,17 @@ end
 
 local function countAgents()
 	local zombieCount, humanCount = 0, 0
-
-	for _, zombie in ipairs(zombiesFolder:GetChildren()) do
-		if zombie:GetAttribute("Name") == "Zombie" and zombie:FindFirstChild("Humanoid") and zombie.Humanoid.Health > 0 then
-			zombieCount += 1
+	for _, zombie in ipairs(workspace.Zombies:GetChildren()) do
+		local humanoid = zombie:FindFirstChild("Humanoid")
+		if zombie:GetAttribute("Name") == "Zombie" and humanoid and humanoid.Health > 0 then 
+			zombieCount += 1 
 		end
 	end
 
-	for _, human in ipairs(humansFolder:GetChildren()) do
-		if human:GetAttribute("Name") == "Human" and human:FindFirstChild("Humanoid") and human.Humanoid.Health > 0 then
-			humanCount += 1
+	for _, human in ipairs(workspace.Humans:GetChildren()) do
+		local humanoid = human:FindFirstChild("Humanoid")
+		if human:GetAttribute("Name") == "Human" and humanoid and humanoid.Health > 0 then 
+			humanCount += 1 
 		end
 	end
 
